@@ -1,0 +1,6 @@
+{
+  "item_model_optimization.config.title": "物品模型渲染优化",
+  "item_model_optimization.config.enabled": "物品 GPU 批量渲染",
+  "item_model_optimization.config.compute": "GPU 动画预处理",
+  "item_model_optimization.config.visibility": "跳过物品遮挡检查"
+}

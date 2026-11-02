@@ -1,0 +1,7 @@
+.gradle/
+build/
+releases/
+run/
+.idea/
+*.iml
+run-forge/

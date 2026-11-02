@@ -1,0 +1,6 @@
+{
+  "item_model_optimization.config.title": "Item Model Optimization",
+  "item_model_optimization.config.enabled": "GPU item batching",
+  "item_model_optimization.config.compute": "GPU animation preparation",
+  "item_model_optimization.config.visibility": "Skip item visibility checks"
+}

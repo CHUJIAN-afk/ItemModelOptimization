@@ -1,0 +1,25 @@
+modLoader="javafml"
+loaderVersion="[47,)"
+license="MIT"
+
+[[mods]]
+modId="item_model_optimization"
+version="${version}"
+displayName="物品模型渲染优化"
+authors="FirstSight"
+description='''Caches static ground item meshes on the GPU and batches matching stacks with instanced rendering. Preserves vanilla item spin and bobbing.'''
+displayTest="IGNORE_ALL_VERSION"
+
+[[dependencies.item_model_optimization]]
+modId="forge"
+mandatory=true
+versionRange="[47.4.22,48)"
+ordering="NONE"
+side="CLIENT"
+
+[[dependencies.item_model_optimization]]
+modId="minecraft"
+mandatory=true
+versionRange="[1.20.1]"
+ordering="NONE"
+side="CLIENT"
