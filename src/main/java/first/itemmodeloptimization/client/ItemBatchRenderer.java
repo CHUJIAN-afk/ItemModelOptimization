@@ -63,6 +63,7 @@ public final class ItemBatchRenderer {
     private final BlockPos.MutableBlockPos shadowPosition = new BlockPos.MutableBlockPos();
     private final Long2IntOpenHashMap lightCells = new Long2IntOpenHashMap();
     private final List<Entity> remainingEntities = new ArrayList<>();
+    private final List<ItemEntity> sceneItems = new ArrayList<>();
     private final List<Entity> remainingView = Collections.unmodifiableList(remainingEntities);
     private float partialTick;
     public boolean collecting;
@@ -72,10 +73,13 @@ public final class ItemBatchRenderer {
     private boolean sceneStationary;
     private boolean sceneReused;
     private long sceneTick;
+    private int sceneSkyDarken;
     private int sceneEntityCount;
     private int sceneInstances;
     private int sceneCollected;
     private Vec3 sceneCamera = Vec3.ZERO;
+    private double sceneDistanceMargin, sceneViewScale, sceneEntityDistance;
+    private int sceneRenderDistance;
     private long sceneBuilds;
     private long sceneReuses;
     private boolean sceneShadows;
@@ -130,8 +134,6 @@ public final class ItemBatchRenderer {
         cacheMisses = 0;
         shadowDrawCalls = 0;
         active = false;
-        lightCells.clear();
-        lightCells.defaultReturnValue(-1);
         if (!failed && ItemModelOptimization.CONFIG.enabled.get() && GL.getCapabilities().OpenGL33) {
             if (program == 0) {
                 int fragment = 0;
@@ -177,9 +179,23 @@ public final class ItemBatchRenderer {
                 && !minecraft.getEntityRenderDispatcher().shouldRenderHitBoxes()
                 && (minecraft.options.entityShadows().get() && ((ShadowSettings) minecraft.getEntityRenderDispatcher()).imo$shadows()) == sceneShadows
                 && ItemModelOptimization.CONFIG.skipVisibilityChecks.get() && sceneSkipVisibilityChecks
-                && sceneValid && sceneStationary && !sceneDirty && level.getGameTime() == sceneTick
-                && level.getEntityCount() == sceneEntityCount && camera.getPosition().equals(sceneCamera)
+                && sceneValid && sceneStationary && !sceneDirty && level.getSkyDarken() == sceneSkyDarken
+                && level.getEntityCount() == sceneEntityCount && Entity.getViewScale() == sceneViewScale
+                && minecraft.options.renderDistance().get() == sceneRenderDistance
+                && minecraft.options.entityDistanceScaling().get() == sceneEntityDistance
+                && camera.getPosition().distanceToSqr(sceneCamera) < sceneDistanceMargin * sceneDistanceMargin
                 && !level.getChunkSource().getLightEngine().hasLightWork();
+        if (sceneReused && sceneTick != level.getGameTime()) {
+            for (ItemEntity item : sceneItems) {
+                EntityCache cached = ((EntityCacheAccess) item).imo$cache();
+                if (item.getAge() - ticks != cached.ageOffset || item.getItem() != cached.stack
+                        || cached.version != ((ComponentVersion) cached.stack.getComponents()).imo$version()) {
+                    sceneReused = false;
+                    break;
+                }
+            }
+            sceneTick = level.getGameTime();
+        }
         if (sceneReused) {
             sceneReuses++;
             instances = sceneInstances;
@@ -188,7 +204,11 @@ public final class ItemBatchRenderer {
         if (shadows != null) {
             shadows.count = sceneReused ? shadows.retainedCount : 0;
             shadows.flushed = false;
-            shadows.receivers.clear();
+            if (!sceneReused) shadows.receivers.clear();
+        }
+        if (!sceneReused) {
+            lightCells.clear();
+            lightCells.defaultReturnValue(-1);
         }
         shadowInstances = shadows == null ? 0 : shadows.count;
         for (List<GpuItemBatch> bucket : buckets.values()) {
@@ -256,6 +276,7 @@ public final class ItemBatchRenderer {
                 batch = null;
             }
             if (batch != null && !batch.flushed) {
+                ((ComponentVersion) stack.getComponents()).imo$track();
                 int count = stack.getCount();
                 int copies = count <= 1 ? 1 : count <= 16 ? 2 : count <= 32 ? 3 : count <= 48 ? 4 : 5;
                 if (batch.count + copies <= 65536) {
@@ -263,6 +284,7 @@ public final class ItemBatchRenderer {
                     boolean spread = extensions == IClientItemExtensions.DEFAULT || extensions.shouldSpreadAsEntity(stack);
                     boolean bob = extensions == IClientItemExtensions.DEFAULT || extensions.shouldBobAsEntity(stack);
                     float ageOffset = entity.getAge() - (float) ticks;
+                    cached.ageOffset = (int) ageOffset;
                     batch.addEntity((float) (Mth.lerp(partialTick, entity.xOld, entity.getX()) - originX),
                             (float) (Mth.lerp(partialTick, entity.yOld, entity.getY()) - originY),
                             (float) (Mth.lerp(partialTick, entity.zOld, entity.getZ()) - originZ),
@@ -290,11 +312,13 @@ public final class ItemBatchRenderer {
         if (dispatcher.shouldRenderHitBoxes()) return entities;
         if (sceneReused) return remainingView;
         remainingEntities.clear();
+        sceneItems.clear();
         boolean stationary = true;
         boolean rendererChecked = false;
         boolean standardRenderer = false;
         boolean renderShadows = minecraft.options.entityShadows().get() && ((ShadowSettings) dispatcher).imo$shadows();
         boolean skipVisibility = ItemModelOptimization.CONFIG.skipVisibilityChecks.get();
+        sceneDistanceMargin = Double.POSITIVE_INFINITY;
         for (Entity entity : entities) {
             boolean submitted = false;
             if (entity.getClass() == ItemEntity.class && entity.getType() == EntityType.ITEM
@@ -306,6 +330,9 @@ public final class ItemBatchRenderer {
                     rendererChecked = true;
                 }
                 if (standardRenderer) {
+                    double size = item.getBoundingBox().getSize();
+                    if (Double.isNaN(size)) size = 1;
+                    sceneDistanceMargin = Math.min(sceneDistanceMargin, Math.abs(size * 64 * Entity.getViewScale() - item.position().distanceTo(camera)));
                     if (skipVisibility ? !item.shouldRender(camera.x, camera.y, camera.z)
                             : !dispatcher.shouldRender(item, minecraft.levelRenderer.getFrustum(), camera.x, camera.y, camera.z)) continue;
                     Vec3 probe = item.getLightProbePosition(partialTick);
@@ -322,12 +349,17 @@ public final class ItemBatchRenderer {
                         collected++;
                         addShadow(item, partialTick, renderShadows);
                         EntityCache cached = ((EntityCacheAccess) item).imo$cache();
+                        sceneItems.add(item);
                         stationary &= item.xOld == item.getX() && item.yOld == item.getY() && item.zOld == item.getZ()
-                                && !cached.dynamicModel && !cached.dynamicFoil;
+                                && !cached.dynamicModel && !cached.dynamicFoil
+                                && cached.batch.extensions == IClientItemExtensions.DEFAULT;
                     }
                 }
             }
-            if (!submitted) remainingEntities.add(entity);
+            if (!submitted) {
+                remainingEntities.add(entity);
+                if (entity instanceof ItemEntity) stationary = false;
+            }
         }
         for (List<GpuItemBatch> bucket : buckets.values()) {
             for (GpuItemBatch batch : bucket) if (batch.entityBatch) batch.retainedCount = batch.count;
@@ -338,10 +370,14 @@ public final class ItemBatchRenderer {
         sceneStationary = stationary;
         sceneDirty = false;
         sceneTick = level.getGameTime();
+        sceneSkyDarken = level.getSkyDarken();
         sceneEntityCount = level.getEntityCount();
         sceneInstances = instances;
         sceneCollected = collected;
         sceneCamera = camera;
+        sceneViewScale = Entity.getViewScale();
+        sceneRenderDistance = minecraft.options.renderDistance().get();
+        sceneEntityDistance = minecraft.options.entityDistanceScaling().get();
         sceneShadows = renderShadows;
         sceneSkipVisibilityChecks = skipVisibility;
         return remainingView;
@@ -564,6 +600,7 @@ public final class ItemBatchRenderer {
         opaqueSprites.clear();
         lightCells.clear();
         remainingEntities.clear();
+        sceneItems.clear();
         collecting = false;
         sceneValid = false;
         sceneDirty = true;
@@ -632,6 +669,8 @@ public final class ItemBatchRenderer {
 
     public interface ComponentVersion {
         int imo$version();
+        void imo$track();
+        boolean imo$tracked();
     }
 
     public interface ShadowSettings {
@@ -647,6 +686,7 @@ public final class ItemBatchRenderer {
         private GpuItemBatch batch;
         private int version;
         private int generation = -1;
+        private int ageOffset;
         private boolean dynamicModel;
         private boolean dynamicFoil;
     }

@@ -3,6 +3,6 @@
   "minVersion": "0.8",
   "package": "first.itemmodeloptimization.mixin",
   "compatibilityLevel": "JAVA_21",
-  "client": ["ItemRendererMixin", "ItemEntityRendererMixin", "ItemEntityCacheMixin", "EntityRenderDispatcherMixin", "EntitySceneMixin", "ItemStackSceneMixin", "LevelRendererMixin", "ClientLevelMixin", "PatchedDataComponentMapMixin"],
+  "client": ["ItemRendererMixin", "ItemEntityRendererMixin", "ItemEntityCacheMixin", "EntityRenderDispatcherMixin", "EntitySceneMixin", "ItemStackSceneMixin", "LevelRendererMixin", "ClientLevelMixin", "ClientChunkCacheMixin", "PatchedDataComponentMapMixin"],
   "injectors": { "defaultRequire": 1 }
 }

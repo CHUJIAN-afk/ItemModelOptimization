@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(ClientLevel.class)
 public class ClientLevelMixin {
-    @Inject(method = {"addEntity", "removeEntity", "sendBlockUpdated"}, at = @At("HEAD"))
+    @Inject(method = {"addEntity", "removeEntity", "sendBlockUpdated", "onChunkLoaded", "unload"}, at = @At("HEAD"))
     private void imo$changed(CallbackInfo ci) {
         ItemModelOptimization.RENDERER.sceneDirty = true;
     }

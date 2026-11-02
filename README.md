@@ -4,6 +4,8 @@ Minecraft 1.21.1 / NeoForge 21.1.238 及以上的客户端模组，Java 21，MIT
 
 通过 GPU 实例化合并普通掉落物的重复模型绘制，保留原版自旋、浮动和地面阴影。世界中使用标准 GROUND 显示方式提交的物品也可复用模型缓存；附魔光效、动态模型、自定义渲染器等特殊情况继续使用原版渲染。
 
+静止场景可跨 tick 复用，物品与光照变化时更新；小幅移动摄像机时保留实例记录，阴影距离衰减在 GPU 中计算。复用帧跳过未变化缓冲的比较与上传。
+
 ## 配置
 
 配置文件为 `config/item_model_optimization-client.toml`，可在模组配置界面调整。
@@ -24,6 +26,10 @@ skipVisibilityChecks = true
 
 [各分支最终测试报告](BENCHMARK.md) · [SVG 矢量图](branding/branch-performance-summary.svg) · [PNG 图表](branding/branch-performance-summary.png)
 
+[本轮平均帧与 1% low 前后对照](branding/low-frame-comparison.svg)
+
+[1.21.1.3 更新内容](CHANGELOG.md)
+
 ## 构建
 
-使用 Java 21，执行 `gradlew.bat build`。仅生成稳定版 `build/libs/item_model_optimization-1.21.1.2.jar`。
+使用 Java 21，执行 `gradlew.bat build`。仅生成稳定版 `build/libs/item_model_optimization-1.21.1.3.jar`。
