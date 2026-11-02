@@ -11,7 +11,8 @@
     "EntitySceneMixin",
     "ItemStackSceneMixin",
     "LevelRendererMixin",
-    "ClientLevelMixin"
+    "ClientLevelMixin",
+    "ClientChunkCacheMixin"
   ],
   "injectors": {
     "defaultRequire": 1
