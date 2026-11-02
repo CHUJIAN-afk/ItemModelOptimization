@@ -26,6 +26,8 @@ skipVisibilityChecks = true
 
 各分支最终测试报告统一保存在 `master`（1.21.1 NeoForge）分支的 `BENCHMARK.md`，本分支不保留独立报告或图表。
 
+[26.1.2.3 更新内容](CHANGELOG.md)
+
 ## 构建
 
-使用 Java 25，执行 `gradlew.bat build`。仅生成稳定版 `build/libs/item_model_optimization-26.1.2.2.jar`。
+使用 Java 25，执行 `gradlew.bat build`。仅生成稳定版 `build/libs/item_model_optimization-26.1.2.3.jar`。

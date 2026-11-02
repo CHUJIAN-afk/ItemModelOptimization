@@ -35,6 +35,7 @@ final class GpuItemBatch implements AutoCloseable {
     boolean flushed, closed;
     private ByteBuffer data, previous;
     private int gpuCapacity, uploadedCount;
+    private boolean dirty;
     int preparedBuffer, preparedCapacity;
     boolean processed;
     int retainedCount;
@@ -122,6 +123,7 @@ final class GpuItemBatch implements AutoCloseable {
     }
     void add(Matrix4fc matrix, Matrix3fc normal, float ageOffset, float phase, boolean animated,
              int light, boolean bob, float x, float y, float z) {
+        dirty = true;
         ensureCapacity(1);
         int offset = count++ * instanceStride;
         matrix.get(offset, data);
@@ -139,6 +141,7 @@ final class GpuItemBatch implements AutoCloseable {
     }
 
     void addEntity(float x, float y, float z, float age, float phase, int light, boolean bob, boolean spread, int copies) {
+        dirty = true;
         ensureCapacity(copies);
         long address = MemoryUtil.memAddress(data) + (long) count * instanceStride;
         float center = (copies - 1) * 0.5f;
@@ -168,6 +171,7 @@ final class GpuItemBatch implements AutoCloseable {
     }
 
     long upload() {
+        if (!dirty && uploadedCount == count && gpuCapacity >= capacity) return 0;
         glBindBuffer(GL_ARRAY_BUFFER, instanceBuffer);
         int bytes = count * instanceStride;
         int first = 0;
@@ -194,6 +198,7 @@ final class GpuItemBatch implements AutoCloseable {
             MemoryUtil.memCopy(MemoryUtil.memAddress(data) + first, MemoryUtil.memAddress(previous) + first, last - first);
         }
         uploadedCount = count;
+        dirty = false;
         return Math.max(0, last - first);
     }
 

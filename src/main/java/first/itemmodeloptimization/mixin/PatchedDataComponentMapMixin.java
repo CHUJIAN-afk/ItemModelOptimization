@@ -14,6 +14,18 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class PatchedDataComponentMapMixin implements ItemBatchRenderer.ComponentVersion {
     @Unique
     private int imo$version;
+    @Unique
+    private boolean imo$tracked;
+
+    @Override
+    public void imo$track() {
+        imo$tracked = true;
+    }
+
+    @Override
+    public boolean imo$tracked() {
+        return imo$tracked;
+    }
 
     @Override
     public int imo$version() {
@@ -23,6 +35,6 @@ public abstract class PatchedDataComponentMapMixin implements ItemBatchRenderer.
     @Inject(method = "ensureMapOwnership", at = @At("HEAD"))
     private void imo$changed(CallbackInfo ci) {
         imo$version++;
-        if (RenderSystem.isOnRenderThread()) ItemModelOptimization.RENDERER.sceneDirty = true;
+        if (imo$tracked && RenderSystem.isOnRenderThread()) ItemModelOptimization.RENDERER.sceneDirty = true;
     }
 }

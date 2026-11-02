@@ -40,6 +40,7 @@ public final class ItemBatchRenderer {
     private final Long2IntOpenHashMap lightCells = new Long2IntOpenHashMap();
     private final BlockPos.MutableBlockPos lightPosition = new BlockPos.MutableBlockPos();
     private final List<Entity> remaining = new ArrayList<>();
+    private final List<ItemEntity> sceneItems = new ArrayList<>();
     private final Matrix4f transform = new Matrix4f();
     private ClientLevel level;
     private Vec3 camera = Vec3.ZERO, sceneCamera = Vec3.ZERO;
@@ -51,6 +52,8 @@ public final class ItemBatchRenderer {
     private GpuShadowBatch shadows;
     private boolean active, failed, reused, stationary, sceneValid, sceneShadows, sceneSkip;
     private long sceneTick, builds, reuses;
+    private int sceneSkyDarken, sceneRenderDistance;
+    private double sceneDistanceMargin, sceneViewScale, sceneEntityDistance;
     private int sceneEntityCount, sceneInstances, sceneCollected;
     public volatile boolean sceneDirty = true;
     public boolean capturing;
@@ -102,20 +105,35 @@ public final class ItemBatchRenderer {
         }
         boolean shadowOption = minecraft.options.entityShadows().get();
         boolean skip = ItemModelOptimization.CONFIG.skipVisibilityChecks.get();
-        reused = active && skip && sceneSkip && sceneValid && stationary && !sceneDirty && sceneTick == level.getGameTime()
-                && sceneEntityCount == level.getEntityCount() && position.equals(sceneCamera) && shadowOption == sceneShadows
+        reused = active && skip && sceneSkip && sceneValid && stationary && !sceneDirty && level.getSkyDarken() == sceneSkyDarken
+                && sceneEntityCount == level.getEntityCount() && Entity.getViewScale() == sceneViewScale
+                && minecraft.options.getEffectiveRenderDistance() == sceneRenderDistance
+                && minecraft.options.entityDistanceScaling().get() == sceneEntityDistance
+                && position.distanceToSqr(sceneCamera) < sceneDistanceMargin * sceneDistanceMargin && shadowOption == sceneShadows
                 && !level.getChunkSource().getLightEngine().hasLightWork();
+        if (reused && sceneTick != level.getGameTime()) {
+            for (ItemEntity item : sceneItems) {
+                EntityCache cache = ((EntityCacheAccess) item).imo$cache();
+                if (item.tickCount - ticks != cache.ageOffset || !ItemStack.isSameItemSameComponents(cache.snapshot, item.getItem())) {
+                    reused = false;
+                    break;
+                }
+            }
+            sceneTick = level.getGameTime();
+        }
         if (reused) {
             instances = sceneInstances;
             collected = sceneCollected;
             reuses++;
         }
-        lightCells.clear();
-        lightCells.defaultReturnValue(-1);
+        if (!reused) {
+            lightCells.clear();
+            lightCells.defaultReturnValue(-1);
+        }
         if (shadows != null) {
             shadows.count = reused ? shadows.retainedCount : 0;
             shadows.flushed = false;
-            shadows.receivers.clear();
+            if (!reused) shadows.receivers.clear();
         }
         shadowInstances = shadows == null ? 0 : shadows.count;
         for (var bucket : buckets.values()) for (var batch : bucket) {
@@ -132,6 +150,8 @@ public final class ItemBatchRenderer {
         var minecraft = Minecraft.getInstance();
         var dispatcher = minecraft.getEntityRenderDispatcher();
         remaining.clear();
+        sceneItems.clear();
+        sceneDistanceMargin = Double.POSITIVE_INFINITY;
         stationary = true;
         boolean skip = ItemModelOptimization.CONFIG.skipVisibilityChecks.get();
         for (Entity entity : entities) {
@@ -140,6 +160,9 @@ public final class ItemBatchRenderer {
                     && !entity.displayFireAnimation() && !entity.isCurrentlyGlowing() && !entity.isInvisible()
                     && dispatcher.getRenderer(entity).getClass() == ItemEntityRenderer.class) {
                 ItemEntity item = (ItemEntity) entity;
+                double size = item.getBoundingBox().getSize();
+                if (Double.isNaN(size)) size = 1;
+                sceneDistanceMargin = Math.min(sceneDistanceMargin, Math.abs(size * 64 * Entity.getViewScale() - item.position().distanceTo(camera)));
                 if (skip ? !item.shouldRender(camera.x, camera.y, camera.z)
                         : !dispatcher.shouldRender(item, frustum, camera.x, camera.y, camera.z)) continue;
                 ItemStack stack = item.getItem();
@@ -154,6 +177,9 @@ public final class ItemBatchRenderer {
                 GpuItemBatch batch = cache.batch;
                 int copies = ItemClusterRenderState.getRenderedAmount(stack.getCount());
                 if (batch != null && !batch.flushed && batch.count + copies <= 65536) {
+                    ((ComponentVersion) stack.getComponents()).imo$track();
+                    cache.ageOffset = item.tickCount - ticks;
+                    sceneItems.add(item);
                     Vec3 probe = item.getLightProbePosition(partialTick);
                     lightPosition.set(Mth.floor(probe.x), Mth.floor(probe.y), Mth.floor(probe.z));
                     long cell = lightPosition.asLong();
@@ -170,11 +196,15 @@ public final class ItemBatchRenderer {
                     instances += copies;
                     collected++;
                     submitted = true;
-                    stationary &= item.xOld == item.getX() && item.yOld == item.getY() && item.zOld == item.getZ();
+                    stationary &= item.xOld == item.getX() && item.yOld == item.getY() && item.zOld == item.getZ()
+                            && batch.extensions == net.neoforged.neoforge.client.extensions.common.IClientItemExtensions.DEFAULT;
                     if (minecraft.options.entityShadows().get()) shadows.add(item, partialTick, camera, originX, originY, originZ);
                 }
             }
-            if (!submitted) remaining.add(entity);
+            if (!submitted) {
+                remaining.add(entity);
+                if (entity instanceof ItemEntity) stationary = false;
+            }
         }
         for (var bucket : buckets.values()) for (var batch : bucket) if (batch.entityBatch) batch.retainedCount = batch.count;
         shadows.retainedCount = shadows.count;
@@ -183,6 +213,10 @@ public final class ItemBatchRenderer {
         sceneValid = true;
         sceneDirty = false;
         sceneCamera = camera;
+        sceneViewScale = Entity.getViewScale();
+        sceneRenderDistance = minecraft.options.getEffectiveRenderDistance();
+        sceneEntityDistance = minecraft.options.entityDistanceScaling().get();
+        sceneSkyDarken = level.getSkyDarken();
         sceneTick = level.getGameTime();
         sceneEntityCount = level.getEntityCount();
         sceneInstances = instances;
@@ -324,6 +358,7 @@ public final class ItemBatchRenderer {
         shadows = null;
         processor = null;
         program = entityProgram = preparedProgram = framebuffer = 0;
+        sceneItems.clear();
         sceneValid = false;
         sceneDirty = true;
         failed = false;
@@ -333,7 +368,11 @@ public final class ItemBatchRenderer {
         return String.format(Locale.ROOT, "%d instances (%d collected), %d instanced draws, %d shadow instances/%d shadow draws, %d new meshes, %d instance bytes/frame, %d mesh bytes/frame, %d scene builds/%d reuses", instances, collected, drawCalls, shadowInstances, shadowDrawCalls, cacheMisses, uploadedBytes, modelBytes, builds, reuses);
     }
 
-    public interface ComponentVersion { int imo$version(); }
+    public interface ComponentVersion {
+        int imo$version();
+        void imo$track();
+        boolean imo$tracked();
+    }
     public interface BufferAccess { int imo$handle(); }
     public interface EntityCacheAccess { EntityCache imo$cache(); }
     public interface ItemStateAccess {
@@ -345,5 +384,6 @@ public final class ItemBatchRenderer {
         private ItemStack snapshot = ItemStack.EMPTY;
         private GpuItemBatch batch;
         private int generation = -1;
+        private int ageOffset;
     }
 }

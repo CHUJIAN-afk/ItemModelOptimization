@@ -1,7 +1,7 @@
 #version 330 core
 layout(location = 0) in vec4 Bounds;
 layout(location = 1) in vec4 Shadow;
-layout(location = 2) in vec2 Parameters;
+layout(location = 2) in vec4 Parameters;
 uniform mat4 View;
 uniform mat4 Projection;
 uniform vec3 Camera;
@@ -20,5 +20,9 @@ void main() {
     position.xyz *= 0.99975586;
     gl_Position = Projection * position;
     texCoord = (Shadow.yz - vec2(x, z)) / (2.0 * Parameters.x) + 0.5;
-    alpha = Shadow.w;
+    vec3 itemPosition = vec3(Shadow.y, Parameters.z, Shadow.z) - Camera;
+    float distanceSquared = dot(itemPosition, itemPosition);
+    float weight = (1.0 - distanceSquared / 256.0) * 0.75;
+    alpha = floor(clamp((weight - Parameters.y * 0.5) * 0.5 * Shadow.w, 0.0, 1.0) * 255.0) / 255.0;
+    if (distanceSquared >= 256.0 || alpha <= 0.0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
 }

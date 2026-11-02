@@ -29,6 +29,7 @@ final class GpuShadowBatch implements AutoCloseable {
     private int capacity;
     private int gpuCapacity;
     private int uploadedCount;
+    private boolean dirty;
     int count;
     int retainedCount;
     boolean flushed;
@@ -41,9 +42,9 @@ final class GpuShadowBatch implements AutoCloseable {
         buffer = glGenBuffers();
         glBindVertexArray(vao);
         glBindBuffer(GL_ARRAY_BUFFER, buffer);
-        glVertexAttribPointer(0, 4, GL_FLOAT, false, 40, 0);
-        glVertexAttribPointer(1, 4, GL_FLOAT, false, 40, 16);
-        glVertexAttribPointer(2, 2, GL_FLOAT, false, 40, 32);
+        glVertexAttribPointer(0, 4, GL_FLOAT, false, 48, 0);
+        glVertexAttribPointer(1, 4, GL_FLOAT, false, 48, 16);
+        glVertexAttribPointer(2, 4, GL_FLOAT, false, 48, 32);
         for (int attribute = 0; attribute < 3; attribute++) {
             glEnableVertexAttribArray(attribute);
             glVertexAttribDivisor(attribute, 1);
@@ -53,13 +54,11 @@ final class GpuShadowBatch implements AutoCloseable {
     }
 
     void add(ItemEntity entity, float partialTick, Vec3 camera, double originX, double originY, double originZ) {
-        double distance = camera.distanceToSqr(entity.position());
-        if (distance < 256 && !entity.isInvisible()) {
-            float weight = (float) ((1 - distance / 256) * 0.75);
+        if (!entity.isInvisible()) {
             double x = Mth.lerp(partialTick, entity.xOld, entity.getX());
             double y = Mth.lerp(partialTick, entity.yOld, entity.getY());
             double z = Mth.lerp(partialTick, entity.zOld, entity.getZ());
-            int minY = Mth.floor(y - Math.min(weight * 2, 0.15f));
+            int minY = Mth.floor(y - 0.15f);
             int maxY = Mth.floor(y);
             var level = entity.level();
             for (int bx = Mth.floor(x - 0.15f), maxX = Mth.floor(x + 0.15f); bx <= maxX; bx++) {
@@ -84,15 +83,15 @@ final class GpuShadowBatch implements AutoCloseable {
                             }
                             receivers.put(key, receiver);
                         }
-                        float alpha = Mth.clamp((weight - (float) (y - by) * 0.5f) * 0.5f * receiver.brightness, 0, 1);
-                        if (receiver.bounds != null && alpha > 0) {
+                        if (receiver.bounds != null) {
+                            dirty = true;
                             if (count == capacity) {
                                 capacity = Math.max(64, capacity * 2);
-                                data = data == null ? MemoryUtil.memAlloc(capacity * 40) : MemoryUtil.memRealloc(data, capacity * 40);
-                                previous = previous == null ? MemoryUtil.memAlloc(capacity * 40) : MemoryUtil.memRealloc(previous, capacity * 40);
+                                data = data == null ? MemoryUtil.memAlloc(capacity * 48) : MemoryUtil.memRealloc(data, capacity * 48);
+                                previous = previous == null ? MemoryUtil.memAlloc(capacity * 48) : MemoryUtil.memRealloc(previous, capacity * 48);
                             }
                             AABB bounds = receiver.bounds;
-                            long address = MemoryUtil.memAddress(data) + count++ * 40L;
+                            long address = MemoryUtil.memAddress(data) + count++ * 48L;
                             MemoryUtil.memPutFloat(address, (float) (bounds.minX - originX));
                             MemoryUtil.memPutFloat(address + 4, (float) (bounds.minY - originY));
                             MemoryUtil.memPutFloat(address + 8, (float) (bounds.minZ - originZ));
@@ -100,9 +99,11 @@ final class GpuShadowBatch implements AutoCloseable {
                             MemoryUtil.memPutFloat(address + 16, (float) (bounds.maxZ - originZ));
                             MemoryUtil.memPutFloat(address + 20, (float) (x - originX));
                             MemoryUtil.memPutFloat(address + 24, (float) (z - originZ));
-                            MemoryUtil.memPutFloat(address + 28, Mth.floor(alpha * 255) / 255.0f);
+                            MemoryUtil.memPutFloat(address + 28, receiver.brightness);
                             MemoryUtil.memPutFloat(address + 32, 0.15f);
-                            MemoryUtil.memPutInt(address + 36, 0);
+                            MemoryUtil.memPutFloat(address + 36, (float) (y - by));
+                            MemoryUtil.memPutFloat(address + 40, (float) (y - originY));
+                            MemoryUtil.memPutInt(address + 44, 0);
                         }
                     }
                 }
@@ -115,17 +116,18 @@ final class GpuShadowBatch implements AutoCloseable {
         if (count > 0 && !flushed) {
             glBindBuffer(GL_ARRAY_BUFFER, buffer);
             boolean changed = gpuCapacity < capacity || uploadedCount != count
-                    || data.slice(0, count * 40).mismatch(previous.slice(0, count * 40)) >= 0;
+                    || dirty && data.slice(0, count * 48).mismatch(previous.slice(0, count * 48)) >= 0;
             if (gpuCapacity < capacity) {
-                glBufferData(GL_ARRAY_BUFFER, capacity * 40L, GL_DYNAMIC_DRAW);
+                glBufferData(GL_ARRAY_BUFFER, capacity * 48L, GL_DYNAMIC_DRAW);
                 gpuCapacity = capacity;
             }
             if (changed) {
-                glBufferSubData(GL_ARRAY_BUFFER, 0, data.slice(0, count * 40));
-                MemoryUtil.memCopy(MemoryUtil.memAddress(data), MemoryUtil.memAddress(previous), count * 40L);
-                uploaded = count * 40L;
+                glBufferSubData(GL_ARRAY_BUFFER, 0, data.slice(0, count * 48));
+                MemoryUtil.memCopy(MemoryUtil.memAddress(data), MemoryUtil.memAddress(previous), count * 48L);
+                uploaded = count * 48L;
             }
             uploadedCount = count;
+            dirty = false;
             ItemBatchRenderer.uniforms(program, cameraState);
             frame.bindTexture(0, texture);
             glBindVertexArray(vao);
