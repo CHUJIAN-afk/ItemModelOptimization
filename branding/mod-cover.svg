@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="400" height="400" viewBox="0 0 400 400">
+  <title>物品模型渲染优化</title>
+  <desc>蓝色轻微亮度渐变背景，中央为圆润的白色上升箭头。</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#398EE2"/>
+      <stop offset="1" stop-color="#287ACB"/>
+    </linearGradient>
+    <linearGradient id="arrow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E6F3FF"/>
+    </linearGradient>
+    <path id="boost" d="M94 260 161 187Q174 173 187 186L214 212 255 168H239Q227 168 227 156V132Q227 120 239 120H295Q308 120 308 133V190Q308 203 295 203H280Q267 203 267 190V183L227 226Q214 240 201 227L174 201 119 279Q107 292 95 280L91 276Q83 268 94 260Z"/>
+  </defs>
+  <rect width="400" height="400" fill="url(#background)"/>
+  <ellipse cx="201" cy="311" rx="102" ry="12" fill="#165D9E" opacity="0.18"/>
+  <g fill="none" stroke="#BCE2FF" stroke-width="9" stroke-linecap="round" opacity="0.75">
+    <path d="M89 224 114 198"/>
+    <path d="M125 293 143 274"/>
+  </g>
+  <use xlink:href="#boost" transform="translate(0 10)" fill="#15568F" stroke="#15568F" stroke-width="11" stroke-linejoin="round" opacity="0.48"/>
+  <use xlink:href="#boost" fill="url(#arrow)" stroke="#174E81" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M241 134H289Q294 134 294 139V153" fill="none" stroke="white" stroke-width="8" stroke-linecap="round"/>
+  <path d="m173 193 30 30" fill="none" stroke="white" stroke-width="6" stroke-linecap="round" opacity="0.9"/>
+  <path d="M311 246Q313 258 326 260Q313 262 311 275Q309 262 296 260Q309 258 311 246Z" fill="#D9EDFF"/>
+  <circle cx="97" cy="158" r="5" fill="#D9EDFF" opacity="0.85"/>
+</svg>

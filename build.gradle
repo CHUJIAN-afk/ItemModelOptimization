@@ -1,0 +1,34 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.141'
+}
+
+version = mod_version
+group = 'first.itemmodeloptimization'
+base.archivesName = 'item_model_optimization'
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+neoForge {
+    version = '21.1.238'
+    mods {
+        item_model_optimization { sourceSet(sourceSets.main) }
+    }
+    runs {
+        client {
+            client()
+            loadedMods = [mods.item_model_optimization]
+        }
+    }
+}
+
+repositories { mavenCentral() }
+
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+tasks.withType(ProcessResources).configureEach {
+    inputs.property 'version', project.version
+    filesMatching('META-INF/neoforge.mods.toml') { expand(version: project.version) }
+}
+tasks.withType(Jar).configureEach { from 'LICENSE' }
